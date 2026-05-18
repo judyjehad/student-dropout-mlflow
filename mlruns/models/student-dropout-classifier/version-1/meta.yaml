@@ -1,0 +1,16 @@
+creation_timestamp: 1779100799875
+current_stage: Archived
+deployment_job_state: null
+description: null
+last_updated_timestamp: 1779107157451
+model_id: m-9cda8453a51344468afd6fdff85e6048
+name: student-dropout-classifier
+run_id: 8a2a131a4ae54ea681059469d5433718
+run_link: null
+source: models:/m-9cda8453a51344468afd6fdff85e6048
+status: READY
+status_message: null
+storage_location: file:///Users/judybseiso/student-dropout-mlflow/mlruns/812282113413468704/models/m-9cda8453a51344468afd6fdff85e6048/artifacts
+user_id: null
+version: 1
+workspace: default

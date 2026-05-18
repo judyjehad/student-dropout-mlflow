@@ -1,0 +1,8 @@
+artifact_location: file:///Users/judybseiso/student-dropout-mlflow/mlruns/878681484622399947
+creation_time: 1779105938438
+experiment_id: '878681484622399947'
+last_update_time: 1779105938438
+lifecycle_stage: active
+name: student-dropout-tuning
+trace_location: null
+workspace: default

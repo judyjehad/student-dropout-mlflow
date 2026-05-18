@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/judybseiso/student-dropout-mlflow/mlruns/812282113413468704/236de69668ba432e835c140ba9fb6628/artifacts
+end_time: 1779100794511
+entry_point_name: ''
+experiment_id: '812282113413468704'
+lifecycle_stage: active
+run_id: 236de69668ba432e835c140ba9fb6628
+run_name: logistic_regression
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1779100775384
+status: 3
+tags: []
+user_id: judybseiso

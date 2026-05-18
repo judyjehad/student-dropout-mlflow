@@ -1,0 +1,10 @@
+artifact_location: file:///Users/judybseiso/student-dropout-mlflow/mlruns/878681484622399947/models/m-49e6034548af4eec977e643f01c99453/artifacts
+creation_timestamp: 1779105979527
+experiment_id: '878681484622399947'
+last_updated_timestamp: 1779105981463
+model_id: m-49e6034548af4eec977e643f01c99453
+model_type: null
+name: random_forest
+source_run_id: d2ba36984b494f00bce1c6bdc215739b
+status: 2
+status_message: null

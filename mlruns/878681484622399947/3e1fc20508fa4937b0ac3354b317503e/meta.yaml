@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/judybseiso/student-dropout-mlflow/mlruns/878681484622399947/3e1fc20508fa4937b0ac3354b317503e/artifacts
+end_time: 1779106148702
+entry_point_name: ''
+experiment_id: '878681484622399947'
+lifecycle_stage: active
+run_id: 3e1fc20508fa4937b0ac3354b317503e
+run_name: xgboost
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1779106138644
+status: 3
+tags: []
+user_id: judybseiso
