@@ -9,6 +9,8 @@ Endpoints:
   GET  /model       → model info
   POST /predict     → predict dropout risk for a student
   GET  /monitoring  → live prediction stats + drift alert
+  GET  /alerts      → dedicated alerts endpoint
+  POST /feedback    → submit actual outcome for a prediction
 """
 
 import pickle
@@ -17,7 +19,7 @@ import pandas as pd
 import mlflow.sklearn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from src.monitoring import log_prediction, get_stats
+from src.monitoring import log_prediction, log_feedback, get_stats, get_alerts
 
 # ── 1. Setup ──────────────────────────────────────────────────────────────────
 mlflow.set_tracking_uri("file:./mlruns")
@@ -40,7 +42,7 @@ with open("data/processed/label_encoder.pkl", "rb") as f:
 model = mlflow.sklearn.load_model("models:/student-dropout-classifier@Production")
 print("✅ Model ready\n")
 
-# ── 3. Request schema ─────────────────────────────────────────────────────────
+# ── 3. Request schemas ────────────────────────────────────────────────────────
 class StudentFeatures(BaseModel):
     marital_status:                            int
     application_mode:                          int
@@ -72,6 +74,10 @@ class StudentFeatures(BaseModel):
     unemployment_rate:                         float
     inflation_rate:                            float
     gdp:                                       float
+
+class FeedbackRequest(BaseModel):
+    prediction_id:  int
+    actual_outcome: str  # "Dropout", "Enrolled", or "Graduate"
 
 # ── 4. Helper: map API fields → original dataset column names ─────────────────
 def to_dataframe(s: StudentFeatures) -> pd.DataFrame:
@@ -119,7 +125,7 @@ def health_check():
 def model_info():
     return {
         "model_name":    "student-dropout-classifier",
-        "version":       "1",
+        "alias":         "Production",
         "classes":       list(le.classes_),
         "features_used": "semester 1 only (early-warning)",
     }
@@ -147,8 +153,9 @@ def predict(student: StudentFeatures):
             "probabilities": probabilities,
         }
 
-        # Log every prediction to monitoring database
-        log_prediction(student.model_dump(), result)
+        # Log prediction and get its ID
+        prediction_id = log_prediction(student.model_dump(), result)
+        result["prediction_id"] = prediction_id
 
         return result
 
@@ -159,6 +166,25 @@ def predict(student: StudentFeatures):
 @app.get("/monitoring")
 def monitoring():
     return get_stats()
+
+
+@app.get("/alerts")
+def alerts(limit: int = 20):
+    return get_alerts(limit=limit)
+
+
+@app.post("/feedback")
+def feedback(body: FeedbackRequest):
+    valid_classes = ["Dropout", "Enrolled", "Graduate"]
+    if body.actual_outcome not in valid_classes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"actual_outcome must be one of {valid_classes}"
+        )
+    result = log_feedback(body.prediction_id, body.actual_outcome)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 
 # ── 6. Run ────────────────────────────────────────────────────────────────────

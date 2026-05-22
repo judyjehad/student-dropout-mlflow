@@ -1,12 +1,19 @@
 # Student Dropout — Early Warning Model
 
-A machine learning pipeline that predicts whether a student will **drop out**, remain **enrolled**, or **graduate**, using only **semester 1** data. The project uses [MLflow](https://mlflow.org/) for experiment tracking, model registry, and deployment, plus a **FastAPI** REST API with live prediction monitoring.
-
-## Problem
-
-Universities need early signals of dropout risk. This model acts as an early-warning system: after a student completes their first semester, you can score them before second-semester outcomes are known.
+A machine learning pipeline that predicts whether a student will **drop out**, remain **enrolled**, or **graduate**, using only **semester 1** data. The project uses [MLflow](https://mlflow.org/) for experiment tracking and model registry, plus a **FastAPI** REST API with production-style monitoring: SQLite logging, drift alerts, and a feedback loop for real-world accuracy tracking.
 
 **Target classes:** `Dropout`, `Enrolled`, `Graduate`
+
+## Key features
+
+- **Early-warning prediction** — semester 1 features only (no 2nd-semester leakage)
+- **MLflow** — experiment tracking, artifact logging, Model Registry with `Production` / `Archived` aliases
+- **Hyperparameter tuning** — grid search over Random Forest and XGBoost (45 runs)
+- **FastAPI REST API** — predict, monitor, alert, and collect feedback
+- **SQLite monitoring** — every prediction logged with confidence and class probabilities
+- **Drift alerts** — automatic warnings when rolling average confidence drops below 60%
+- **Feedback loop** — submit actual outcomes to measure real prediction accuracy in production
+- **Swagger UI** — interactive API docs at `/docs`
 
 ## Dataset
 
@@ -22,20 +29,22 @@ data/students.csv
        ▼
   preprocess.py  ──►  data/processed/  (arrays + preprocessor.pkl)
        │
-       ├──► train.py      ──► MLflow experiment: student-dropout-prediction
+       ├──► train.py      ──► MLflow: student-dropout-prediction
        │                         (Logistic Regression, Random Forest, XGBoost)
        │
-       └──► tune.py       ──► MLflow experiment: student-dropout-tuning
-                                 (grid search on RF + XGBoost)
+       └──► tune.py       ──► MLflow: student-dropout-tuning
+                                 (grid search RF + XGBoost → 45 runs)
        │
        ▼
   Model Registry: student-dropout-classifier
        │
-       ├── set_stage.py   (Production / Archived aliases)
-       ├── predict.py     (CLI batch examples)
-       └── serve_model.py (FastAPI on :8000)
+       ├── set_stage.py   (v2 → Production, v1 → Archived)
+       ├── predict.py     (CLI examples)
+       └── serve_model.py (FastAPI :8000)
                 │
                 └── monitoring.py ──► data/monitoring.db
+                      ├── predictions  (inputs, outputs, feedback)
+                      └── alerts       (confidence drift warnings)
 ```
 
 ## Project structure
@@ -45,17 +54,17 @@ student-dropout-mlflow/
 ├── data/
 │   ├── students.csv              # Raw dataset
 │   ├── processed/                # Preprocessed train/test + pickles
-│   └── monitoring.db             # SQLite log of API predictions
+│   └── monitoring.db             # SQLite: predictions + alerts
 ├── src/
 │   ├── preprocess.py             # Feature engineering & train/test split
-│   ├── train.py                  # Train 3 baselines, register best
-│   ├── tune.py                   # Hyperparameter grid search, register best
-│   ├── set_stage.py              # Set Production / Archived model aliases
-│   ├── predict.py                # Load Production model, example predictions
+│   ├── train.py                  # Train 3 baselines, register best (v1)
+│   ├── tune.py                   # Hyperparameter grid search, register best (v2)
+│   ├── set_stage.py              # Production / Archived aliases
+│   ├── predict.py                # CLI predictions from Production model
 │   ├── serve_model.py            # FastAPI REST API
-│   └── monitoring.py             # SQLite logging + drift alerts
-├── docs/screenshots/             # README screenshots (confusion matrices + UI captures)
-├── mlruns/                       # MLflow tracking & model registry (local)
+│   └── monitoring.py             # Logging, drift alerts, feedback, stats
+├── docs/screenshots/             # README screenshots
+├── mlruns/                       # MLflow tracking & model registry
 ├── outputs/                      # Confusion matrix PNGs from training
 └── requirements.txt
 ```
@@ -63,14 +72,11 @@ student-dropout-mlflow/
 ## Setup
 
 ```bash
-# Clone or cd into the project
 cd student-dropout-mlflow
 
-# Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 pip install fastapi uvicorn   # API server (used by serve_model.py)
 ```
@@ -101,17 +107,13 @@ python src/preprocess.py
 python src/train.py
 ```
 
-Trains three models, each logged as a separate MLflow run:
-
 | Model | Notes |
 |-------|--------|
 | Logistic Regression | `class_weight="balanced"` |
 | Random Forest | 200 trees, `max_depth=10`, balanced |
 | XGBoost | No class balancing (noted for future fairness comparison) |
 
-For each run, MLflow logs parameters, accuracy, F1 (macro & weighted), confusion matrix image, classification report, and the model artifact.
-
-The **best model by F1 macro** on the test set is registered as `student-dropout-classifier` **version 1**.
+Each run logs parameters, accuracy, F1 (macro & weighted), confusion matrix, classification report, and the model artifact. The **best model by F1 macro** is registered as **version 1**.
 
 ### 3. Hyperparameter tuning
 
@@ -119,12 +121,12 @@ The **best model by F1 macro** on the test set is registered as `student-dropout
 python src/tune.py
 ```
 
-Grid search logged to experiment `student-dropout-tuning`:
+Grid search in experiment `student-dropout-tuning`:
 
 - **Random Forest:** `n_estimators` × `max_depth` × `min_samples_split` (18 runs)
 - **XGBoost:** `n_estimators` × `max_depth` × `learning_rate` (27 runs), with balanced `sample_weight`
 
-Each run also logs **5-fold CV F1 macro**. The overall best model (by test F1 macro) is registered as **version 2**.
+Each run logs **5-fold CV F1 macro**. The overall best model (by test F1 macro) is registered as **version 2**.
 
 ### 4. Promote models in the registry
 
@@ -132,9 +134,7 @@ Each run also logs **5-fold CV F1 macro**. The overall best model (by test F1 ma
 python src/set_stage.py
 ```
 
-Sets MLflow model aliases:
-
-- **Version 2** → `Production` (tuned model)
+- **Version 2** → `Production` (tuned Random Forest)
 - **Version 1** → `Archived` (baseline from `train.py`)
 
 `predict.py` and `serve_model.py` load: `models:/student-dropout-classifier@Production`
@@ -161,15 +161,23 @@ Runs two example students (at-risk vs low-risk) and prints class probabilities.
 uvicorn src.serve_model:app --reload
 ```
 
+Open http://127.0.0.1:8000/docs for interactive testing.
+
+## API reference
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Health check |
-| `GET` | `/model` | Model name, version, classes |
-| `POST` | `/predict` | Predict dropout risk for one student |
-| `GET` | `/monitoring` | Live stats + drift alert |
-| — | `/docs` | Swagger UI (interactive testing) |
+| `GET` | `/model` | Model name, alias, target classes |
+| `POST` | `/predict` | Predict dropout risk; returns `prediction_id` |
+| `GET` | `/monitoring` | Live stats, drift alert, feedback accuracy |
+| `GET` | `/alerts` | Confidence drift alert history |
+| `POST` | `/feedback` | Submit actual outcome for a past prediction |
+| — | `/docs` | Swagger UI |
 
-**Example `POST /predict` body** (snake_case field names):
+### `POST /predict`
+
+**Request** (snake_case field names):
 
 ```json
 {
@@ -206,7 +214,7 @@ uvicorn src.serve_model:app --reload
 }
 ```
 
-**Example response:**
+**Response:**
 
 ```json
 {
@@ -216,14 +224,140 @@ uvicorn src.serve_model:app --reload
     "Dropout": 72.3,
     "Enrolled": 18.1,
     "Graduate": 9.6
-  }
+  },
+  "prediction_id": 1
 }
+```
+
+Use `prediction_id` when submitting feedback later.
+
+### `POST /feedback`
+
+Submit the **actual outcome** once it is known (e.g. end of semester).
+
+```json
+{
+  "prediction_id": 1,
+  "actual_outcome": "Dropout"
+}
+```
+
+Valid values: `"Dropout"`, `"Enrolled"`, `"Graduate"`.
+
+**Response:**
+
+```json
+{
+  "prediction_id": 1,
+  "predicted": "Dropout",
+  "actual_outcome": "Dropout",
+  "correct": true,
+  "message": "✅ Correct prediction"
+}
+```
+
+Each prediction accepts feedback **once**. Duplicate submissions return an error response.
+
+### `GET /monitoring`
+
+Returns live production stats:
+
+```json
+{
+  "total_predictions": 12,
+  "average_confidence": 71.4,
+  "recent_avg_confidence": 68.2,
+  "drift_alert": true,
+  "drift_threshold": 60.0,
+  "alert_message": "⚠️  Average confidence dropped to 58.1% (threshold: 60.0%)",
+  "prediction_distribution": { "Dropout": 5, "Graduate": 4, "Enrolled": 3 },
+  "feedback_summary": {
+    "total_feedback": 4,
+    "correct": 3,
+    "real_accuracy": "75.0%"
+  },
+  "recent_predictions": [
+    {
+      "id": 12,
+      "timestamp": "2026-05-18T14:22:01",
+      "prediction": "Dropout",
+      "confidence": 72.3,
+      "actual_outcome": null
+    }
+  ]
+}
+```
+
+### `GET /alerts`
+
+Returns drift alerts logged when rolling average confidence (last 20 predictions) drops below **60%**:
+
+```json
+{
+  "total_alerts": 2,
+  "alerts": [
+    {
+      "timestamp": "2026-05-18T14:22:01",
+      "alert_type": "confidence_drift",
+      "message": "Average confidence dropped to 58.1% — below threshold of 60.0%",
+      "severity": "warning"
+    }
+  ],
+  "status": "⚠️  Active alerts found"
+}
+```
+
+Optional query param: `?limit=20` (default 20).
+
+## Monitoring system
+
+`monitoring.py` backs all production observability. On each `POST /predict`:
+
+1. Input features and prediction result are saved to the `predictions` table
+2. A unique `prediction_id` is returned to the client
+3. Rolling average confidence (last 20 predictions) is checked
+4. If below **60%**, a `confidence_drift` alert is written to the `alerts` table
+
+### Database schema (`data/monitoring.db`)
+
+**`predictions`**
+
+| Column | Description |
+|--------|-------------|
+| `id` | Auto-increment prediction ID |
+| `timestamp` | UTC ISO timestamp |
+| `input_data` | JSON of request features |
+| `prediction` | Predicted class |
+| `confidence` | Max class probability (%) |
+| `prob_dropout` / `prob_enrolled` / `prob_graduate` | Per-class probabilities |
+| `actual_outcome` | Ground truth (set via `/feedback`) |
+
+**`alerts`**
+
+| Column | Description |
+|--------|-------------|
+| `timestamp` | When the alert fired |
+| `alert_type` | e.g. `confidence_drift` |
+| `message` | Human-readable description |
+| `severity` | e.g. `warning` |
+
+### Typical production flow
+
+```
+POST /predict  →  get prediction_id
+       │
+       ▼  (later, when outcome known)
+POST /feedback  →  update actual_outcome, compute correctness
+       │
+       ▼
+GET /monitoring  →  real_accuracy from feedback_summary
+GET /alerts      →  review drift warnings
 ```
 
 ## Final results
 
 All metrics are on the **held-out test set** (20% stratified split, 885 students). Models are ranked by **F1 macro** (primary metric for imbalanced classes).
-
+F1 macro was used as the primary selection metric because the dataset is imbalanced across the three target classes.
 ### Baseline models (`train.py`)
 
 | Model | Accuracy | F1 Macro | F1 Weighted | Registry |
@@ -262,15 +396,11 @@ Generated by `train.py` and saved to `outputs/` and `docs/screenshots/`.
 
 ### MLflow experiment tracking
 
-Run `mlflow ui` and open http://127.0.0.1:5000.
-
 | Experiments comparison | Model Registry |
 |------------------------|----------------|
 | ![MLflow experiments](docs/screenshots/mlflow-experiments.png) | ![MLflow registry](docs/screenshots/mlflow-registry.png) |
 
 ### FastAPI prediction API
-
-Run `uvicorn src.serve_model:app --reload` and open http://127.0.0.1:8000/docs.
 
 | Swagger UI | Sample prediction |
 |------------|-------------------|
@@ -278,21 +408,9 @@ Run `uvicorn src.serve_model:app --reload` and open http://127.0.0.1:8000/docs.
 
 ### Live monitoring
 
-Call `GET /monitoring` after a few `POST /predict` requests.
+`GET /monitoring` after predictions and feedback submissions.
 
 ![Monitoring dashboard](docs/screenshots/monitoring.png)
-
-## Monitoring
-
-Every `POST /predict` call is logged to `data/monitoring.db` via `monitoring.py`.
-
-`GET /monitoring` returns:
-
-- Total prediction count
-- Average confidence (all time and last 20 predictions)
-- Prediction class distribution
-- Recent prediction history
-- **Drift alert** if the rolling average confidence drops below **60%**
 
 ## MLflow details
 
@@ -301,24 +419,27 @@ Every `POST /predict` call is logged to `data/monitoring.db` via `monitoring.py`
 | Tracking URI | `file:./mlruns` |
 | Experiments | `student-dropout-prediction`, `student-dropout-tuning` |
 | Registered model | `student-dropout-classifier` |
-| Production alias | Version 2 (tuned) |
-| Archived alias | Version 1 (baseline) |
+| Production alias | Version 2 (tuned Random Forest) |
+| Archived alias | Version 1 (baseline Random Forest) |
 | Selection metric | F1 macro (test set) |
 
 ## Dependencies
 
-Core packages (`requirements.txt`):
+**`requirements.txt`:**
 
-- `pandas`, `numpy`, `scikit-learn`, `xgboost`, `mlflow`, `matplotlib`, `seaborn`, `jupyter`, `openpyxl`
+- `pandas`, `numpy`, `scikit-learn`, `xgboost`, `mlflow`, `matplotlib`, `jupyter`, `openpyxl`
 
-Additional packages for the API:
+**API (install separately):**
 
-- `fastapi`, `uvicorn`, `pydantic` (installed with FastAPI)
+- `fastapi`, `uvicorn`, `pydantic`
+
+> `flask` is listed in `requirements.txt` but not used by this project; the API is built with FastAPI.
 
 ## Notes
 
 - **Early warning only:** Do not include semester 2 features at inference time; the preprocessor and training pipeline exclude them by design.
 - **Class imbalance:** Logistic Regression and Random Forest use balanced weights; XGBoost tuning uses `sample_weight`. Compare fairness vs performance before production use.
+- **Test vs production accuracy:** Offline test metrics (F1 macro ~68%) differ from `real_accuracy` in `/monitoring`, which is computed only from predictions with submitted feedback.
 - **MLflow file store:** The local `mlruns/` backend works for development; MLflow may warn about migrating to a database backend for long-term use.
 
 ## License
