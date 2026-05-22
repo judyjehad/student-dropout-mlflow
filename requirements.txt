@@ -3,8 +3,9 @@ numpy
 scikit-learn
 xgboost
 mlflow
-flask
 jupyter
 openpyxl
 matplotlib
-seaborn
+fastapi
+uvicorn
+pydantic
