@@ -1,1 +1,8 @@
 .venv/
+mlflow.db
+data/monitoring.db
+data/processed/
+mlruns_backup/
+__pycache__/
+*.pyc
+outputs/

@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from src.monitoring import log_prediction, log_feedback, get_stats, get_alerts
 
 # ── 1. Setup ──────────────────────────────────────────────────────────────────
-mlflow.set_tracking_uri("file:./mlruns")
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
 app = FastAPI(
     title="Student Dropout Prediction API",

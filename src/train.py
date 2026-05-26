@@ -38,7 +38,7 @@ print(f"X_train: {X_train.shape}  X_test: {X_test.shape}")
 print(f"Classes: {list(le.classes_)}\n")
 
 # ── 2. MLflow experiment setup ────────────────────────────────────────────────
-mlflow.set_tracking_uri("file:./mlruns")
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("student-dropout-prediction")
 
 # ── 3. Define models to train ─────────────────────────────────────────────────

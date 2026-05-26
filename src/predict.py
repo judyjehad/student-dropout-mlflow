@@ -12,7 +12,7 @@ import pandas as pd
 import mlflow.sklearn
 
 # ── 1. Setup ──────────────────────────────────────────────────────────────────
-mlflow.set_tracking_uri("file:./mlruns")
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
 # ── 2. Load preprocessor and label encoder ───────────────────────────────────
 with open("data/processed/preprocessor.pkl", "rb") as f:
