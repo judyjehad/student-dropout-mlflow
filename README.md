@@ -8,7 +8,7 @@ A machine learning pipeline that predicts whether a student will **drop out**, r
 
 - **Early-warning prediction** — semester 1 features only (no 2nd-semester leakage)
 - **MLflow** — experiment tracking, artifact logging, Model Registry with `Production` / `Archived` aliases
-- **Hyperparameter tuning** — grid search over Random Forest and XGBoost (45 runs)
+- **Hyperparameter tuning** — grid search (45 runs) and Hyperopt Bayesian optimization (40 runs)
 - **FastAPI REST API** — predict, monitor, alert, and collect feedback
 - **SQLite monitoring** — every prediction logged with confidence and class probabilities
 - **Drift alerts** — automatic warnings when rolling average confidence drops below 60%
@@ -29,16 +29,19 @@ data/students.csv
        ▼
   preprocess.py  ──►  data/processed/  (arrays + preprocessor.pkl)
        │
-       ├──► train.py      ──► MLflow: student-dropout-prediction
-       │                         (Logistic Regression, Random Forest, XGBoost)
+       ├──► train.py          ──► MLflow: student-dropout-prediction
+       │                           (Logistic Regression, Random Forest, XGBoost)
        │
-       └──► tune.py       ──► MLflow: student-dropout-tuning
-                                 (grid search RF + XGBoost → 45 runs)
+       ├──► tune.py           ──► MLflow: student-dropout-tuning
+       │                           (grid search RF + XGBoost → 45 runs)
+       │
+       └──► hyperopt_tune.py  ──► MLflow: student-dropout-hyperopt
+                                   (Bayesian search RF + XGBoost → 40 runs)
        │
        ▼
   Model Registry: student-dropout-classifier
        │
-       ├── set_stage.py   (v2 → Production, v1 → Archived)
+       ├── set_stage.py   (v2 → Production, v3 → Staging, v1 → Archived)
        ├── predict.py     (CLI examples)
        └── serve_model.py (FastAPI :8000)
                 │
@@ -59,7 +62,8 @@ student-dropout-mlflow/
 │   ├── preprocess.py             # Feature engineering & train/test split
 │   ├── train.py                  # Train 3 baselines, register best (v1)
 │   ├── tune.py                   # Hyperparameter grid search, register best (v2)
-│   ├── set_stage.py              # Production / Archived aliases
+│   ├── hyperopt_tune.py          # Bayesian optimization with Hyperopt, register best (v3)
+│   ├── set_stage.py              # Production / Staging / Archived aliases
 │   ├── predict.py                # CLI predictions from Production model
 │   ├── serve_model.py            # FastAPI REST API
 │   └── monitoring.py             # Logging, drift alerts, feedback, stats
@@ -78,7 +82,6 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt
-pip install fastapi uvicorn   # API server (used by serve_model.py)
 ```
 
 Run all commands from the **project root** so relative paths (`data/`, `mlruns/`) resolve correctly.
@@ -128,13 +131,27 @@ Grid search in experiment `student-dropout-tuning`:
 
 Each run logs **5-fold CV F1 macro**. The overall best model (by test F1 macro) is registered as **version 2**.
 
+### 3b. Bayesian optimization with Hyperopt
+
+```bash
+python src/hyperopt_tune.py
+```
+
+Uses **Hyperopt** with the **TPE (Tree-structured Parzen Estimator)** algorithm in experiment `student-dropout-hyperopt`:
+
+- **Random Forest:** 20 evaluations — search over `n_estimators` (50–400), `max_depth` (4–20), `min_samples_split` (2–10)
+- **XGBoost:** 20 evaluations — search over `n_estimators` (50–400), `max_depth` (3–10), `learning_rate` (0.01–0.3, log-uniform)
+
+Unlike grid search, Hyperopt uses Bayesian optimization to intelligently explore the search space — it learns from previous evaluations to focus on promising regions. Each run logs **5-fold CV F1 macro**. The best model is registered as **version 3**.
+
 ### 4. Promote models in the registry
 
 ```bash
 python src/set_stage.py
 ```
 
-- **Version 2** → `Production` (tuned Random Forest)
+- **Version 2** → `Production` (best grid search model, F1=0.6796)
+- **Version 3** → `Staging` (best Hyperopt model, F1=0.6781)
 - **Version 1** → `Archived` (baseline from `train.py`)
 
 `predict.py` and `serve_model.py` load: `models:/student-dropout-classifier@Production`
@@ -366,7 +383,7 @@ F1 macro was used as the primary selection metric because the dataset is imbalan
 | Logistic Regression | 69.60% | 65.45% | 70.89% | — |
 | XGBoost | 72.43% | 64.71% | 71.50% | — |
 
-### Tuned models (`tune.py`) — top 3 of 45 runs
+### Grid search tuned models (`tune.py`) — top 3 of 45 runs
 
 | Model | Hyperparameters | Accuracy | F1 Macro | CV F1 Macro | Registry |
 |-------|-----------------|----------|----------|-------------|----------|
@@ -374,15 +391,31 @@ F1 macro was used as the primary selection metric because the dataset is imbalan
 | XGBoost | `n_estimators=200`, `max_depth=6`, `learning_rate=0.05` | 71.98% | 67.83% | 67.63% | — |
 | XGBoost | `n_estimators=100`, `max_depth=6`, `learning_rate=0.2` | 72.09% | 67.46% | 67.46% | — |
 
+### Hyperopt Bayesian optimization (`hyperopt_tune.py`) — 40 runs
+
+| Model | Search space | Evaluations | Registry |
+|-------|-------------|-------------|----------|
+| Random Forest | `n_estimators` 50–400, `max_depth` 4–20, `min_samples_split` 2–10 | 20 | — |
+| XGBoost | `n_estimators` 50–400, `max_depth` 3–10, `learning_rate` 0.01–0.3 | 20 | — |
+
+Best Hyperopt model (F1 macro = 0.6781) is registered as **v3 (Staging)**.
+
 ### Production model summary
 
 | | |
 |---|---|
-| **Deployed model** | Tuned Random Forest |
+| **Deployed model** | Grid search tuned Random Forest |
 | **Registry** | `student-dropout-classifier` v2 → `@Production` |
 | **Test F1 macro** | 67.96% (+1.29 pp vs baseline RF) |
 | **Test accuracy** | 72.88% (+0.79 pp vs baseline RF) |
 | **5-fold CV F1 macro** | 68.07% |
+
+### Tuning method comparison
+
+| Method | Approach | Total runs | Best F1 Macro | Registry |
+|--------|----------|------------|---------------|----------|
+| Grid search (`tune.py`) | Exhaustive sweep over fixed param combos | 45 | **67.96%** | v2 → Production |
+| Hyperopt (`hyperopt_tune.py`) | Bayesian (TPE) — learns from previous evals | 40 | 67.81% | v3 → Staging |
 
 ## Screenshots
 
@@ -417,9 +450,10 @@ Generated by `train.py` and saved to `outputs/` and `docs/screenshots/`.
 | Item | Value |
 |------|--------|
 | Tracking URI | `file:./mlruns` |
-| Experiments | `student-dropout-prediction`, `student-dropout-tuning` |
+| Experiments | `student-dropout-prediction`, `student-dropout-tuning`, `student-dropout-hyperopt` |
 | Registered model | `student-dropout-classifier` |
-| Production alias | Version 2 (tuned Random Forest) |
+| Production alias | Version 2 (grid search tuned Random Forest) |
+| Staging alias | Version 3 (Hyperopt best model) |
 | Archived alias | Version 1 (baseline Random Forest) |
 | Selection metric | F1 macro (test set) |
 
@@ -428,12 +462,8 @@ Generated by `train.py` and saved to `outputs/` and `docs/screenshots/`.
 **`requirements.txt`:**
 
 - `pandas`, `numpy`, `scikit-learn`, `xgboost`, `mlflow`, `matplotlib`, `jupyter`, `openpyxl`
-
-**API (install separately):**
-
-- `fastapi`, `uvicorn`, `pydantic`
-
-> `flask` is listed in `requirements.txt` but not used by this project; the API is built with FastAPI.
+- `hyperopt` (Bayesian hyperparameter optimization)
+- `fastapi`, `uvicorn`, `pydantic` (REST API)
 
 ## Notes
 

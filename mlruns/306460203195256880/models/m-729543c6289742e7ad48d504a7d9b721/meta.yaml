@@ -1,0 +1,10 @@
+artifact_location: file:///Users/judybseiso/student-dropout-mlflow/mlruns/306460203195256880/models/m-729543c6289742e7ad48d504a7d9b721/artifacts
+creation_timestamp: 1779778469849
+experiment_id: '306460203195256880'
+last_updated_timestamp: 1779778471913
+model_id: m-729543c6289742e7ad48d504a7d9b721
+model_type: null
+name: xgboost
+source_run_id: 99bcadfc1109488ab9b765931028c769
+status: 2
+status_message: null

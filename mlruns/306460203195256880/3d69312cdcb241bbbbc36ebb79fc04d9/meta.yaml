@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/judybseiso/student-dropout-mlflow/mlruns/306460203195256880/3d69312cdcb241bbbbc36ebb79fc04d9/artifacts
+end_time: 1779778312624
+entry_point_name: ''
+experiment_id: '306460203195256880'
+lifecycle_stage: active
+run_id: 3d69312cdcb241bbbbc36ebb79fc04d9
+run_name: random_forest
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1779778309330
+status: 3
+tags: []
+user_id: judybseiso

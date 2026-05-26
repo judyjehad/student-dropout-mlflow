@@ -1,0 +1,8 @@
+artifact_location: file:///Users/judybseiso/student-dropout-mlflow/mlruns/306460203195256880
+creation_time: 1779778286638
+experiment_id: '306460203195256880'
+last_update_time: 1779778286638
+lifecycle_stage: active
+name: student-dropout-hyperopt
+trace_location: null
+workspace: default

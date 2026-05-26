@@ -1,10 +1,11 @@
 aliases:
   Archived: '1'
   Production: '2'
+  Staging: '3'
 creation_timestamp: 1779100799868
 deployment_job_id: null
 deployment_job_state: null
 description: null
-last_updated_timestamp: 1779107308599
+last_updated_timestamp: 1779778794294
 name: student-dropout-classifier
 workspace: default
