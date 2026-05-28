@@ -153,7 +153,7 @@ xgb_space = {
 MAX_EVALS = 40  # 20 per model
 
 print("=" * 60)
-print("Hyperopt — Random Forest (10 evaluations)")
+print(f"Hyperopt — Random Forest ({MAX_EVALS // 2} evaluations)")
 print("=" * 60)
 rf_trials = Trials()
 fmin(fn=rf_objective, space=rf_space, algo=tpe.suggest,
@@ -161,7 +161,7 @@ fmin(fn=rf_objective, space=rf_space, algo=tpe.suggest,
 
 print()
 print("=" * 60)
-print("Hyperopt — XGBoost (10 evaluations)")
+print(f"Hyperopt — XGBoost ({MAX_EVALS // 2} evaluations)")
 print("=" * 60)
 xgb_trials = Trials()
 fmin(fn=xgb_objective, space=xgb_space, algo=tpe.suggest,

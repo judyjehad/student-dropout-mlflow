@@ -12,7 +12,7 @@ Monitors every prediction made by the API:
 
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ def log_prediction(input_data: dict, result: dict) -> int:
              prob_dropout, prob_enrolled, prob_graduate)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
         json.dumps(input_data),
         result["prediction"],
         result["confidence"],
@@ -82,7 +82,7 @@ def log_prediction(input_data: dict, result: dict) -> int:
             INSERT INTO alerts (timestamp, alert_type, message, severity)
             VALUES (?, ?, ?, ?)
         """, (
-            datetime.utcnow().isoformat(),
+            datetime.now(timezone.utc).isoformat(),
             "confidence_drift",
             f"Average confidence dropped to {round(recent_avg, 1)}% — below threshold of {CONFIDENCE_THRESHOLD}%",
             "warning",

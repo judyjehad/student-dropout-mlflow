@@ -102,7 +102,7 @@ python src/preprocess.py
   - **Numerical** → `StandardScaler`
   - **Binary** (0/1) → passthrough
 - 80/20 stratified train/test split
-- Saves `data/processed/X_train.npy`, `X_test.npy`, `y_train.npy`, `y_test.npy`, `preprocessor.pkl`, `label_encoder.pkl`
+- Saves `data/processed/X_train.npy`, `X_test.npy`, `y_train.npy`, `y_test.npy`, `preprocessor.pkl`, `label_encoder.pkl`, `feature_names.pkl`
 
 ### 2. Train baseline models
 
