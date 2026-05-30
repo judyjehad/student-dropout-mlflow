@@ -1,0 +1,23 @@
+artifact_path: /Users/judybseiso/student-dropout-mlflow/mlruns/3/models/m-2a03345a4f874690b1b28002d34616fb/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.3
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+mlflow_version: 3.12.0
+model_id: m-2a03345a4f874690b1b28002d34616fb
+model_size_bytes: 19602529
+model_uuid: m-2a03345a4f874690b1b28002d34616fb
+prompts: null
+run_id: 08f977f99eca48b5be027feefdc126de
+utc_time_created: '2026-05-29 23:28:54.808629'

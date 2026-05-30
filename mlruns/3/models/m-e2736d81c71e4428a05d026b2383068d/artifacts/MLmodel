@@ -1,0 +1,22 @@
+artifact_path: /Users/judybseiso/student-dropout-mlflow/mlruns/3/models/m-e2736d81c71e4428a05d026b2383068d/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.12.3
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBClassifier
+    model_format: ubj
+    xgb_version: 3.2.0
+mlflow_version: 3.12.0
+model_id: m-e2736d81c71e4428a05d026b2383068d
+model_size_bytes: 1406099
+model_uuid: m-e2736d81c71e4428a05d026b2383068d
+prompts: null
+run_id: cd0ce9e9d88b4b4288c2b48c10fe2d52
+utc_time_created: '2026-05-29 23:30:51.177141'
