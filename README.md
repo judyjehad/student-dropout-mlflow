@@ -9,6 +9,8 @@ A machine learning pipeline that predicts whether a student will **drop out**, r
 - **Early-warning prediction** — semester 1 features only (no 2nd-semester leakage)
 - **MLflow** — experiment tracking, artifact logging, Model Registry with `Production` / `Archived` aliases
 - **Hyperparameter tuning** — grid search (45 runs) and Hyperopt Bayesian optimization (40 runs)
+- **Model fusion / ensemble learning** — soft `VotingClassifier` and `StackingClassifier` over the tuned base learners, gated registration on F1 macro improvement
+- **Statistical significance testing** — McNemar's exact test (`statsmodels`) to check whether the fusion vs baseline difference is real or noise
 - **FastAPI REST API** — predict, monitor, alert, and collect feedback
 - **SQLite monitoring** — every prediction logged with confidence and class probabilities
 - **Drift alerts** — automatic warnings when rolling average confidence drops below 60%
@@ -35,8 +37,14 @@ data/students.csv
        ├──► tune.py           ──► MLflow: student-dropout-tuning
        │                           (grid search RF + XGBoost → 45 runs)
        │
-       └──► hyperopt_tune.py  ──► MLflow: student-dropout-hyperopt
-                                   (Bayesian search RF + XGBoost → 40 runs)
+       ├──► hyperopt_tune.py  ──► MLflow: student-dropout-hyperopt
+       │                           (Bayesian search RF + XGBoost → 40 runs)
+       │
+       ├──► fusion_model.py   ──► MLflow: student-dropout-fusion
+       │                           (soft Voting + Stacking over tuned base learners)
+       │
+       └──► mcnemar_test.py   ──► MLflow: student-dropout-fusion
+                                   (McNemar significance: Voting vs RF baseline)
        │
        ▼
   Model Registry: student-dropout-classifier
@@ -63,6 +71,8 @@ student-dropout-mlflow/
 │   ├── train.py                  # Train 3 baselines, register best (v1)
 │   ├── tune.py                   # Hyperparameter grid search, register best (v2)
 │   ├── hyperopt_tune.py          # Bayesian optimization with Hyperopt, register best (v3)
+│   ├── fusion_model.py           # Voting + Stacking ensembles, register if F1 macro improves
+│   ├── mcnemar_test.py           # McNemar significance test: Voting vs RF baseline
 │   ├── set_stage.py              # Production / Staging / Archived aliases
 │   ├── predict.py                # CLI predictions from Production model
 │   ├── serve_model.py            # FastAPI REST API
@@ -143,6 +153,31 @@ Uses **Hyperopt** with the **TPE (Tree-structured Parzen Estimator)** algorithm 
 - **XGBoost:** 20 evaluations — search over `n_estimators` (50–400), `max_depth` (3–10), `learning_rate` (0.01–0.3, log-uniform)
 
 Unlike grid search, Hyperopt uses Bayesian optimization to intelligently explore the search space — it learns from previous evaluations to focus on promising regions. Each run logs **5-fold CV F1 macro**. The best model is registered as **version 3**.
+
+### 3c. Model fusion / ensemble learning
+
+```bash
+python src/fusion_model.py
+```
+
+Combines the three base learners into two fusion models in experiment `student-dropout-fusion`:
+
+- **Soft `VotingClassifier`** — averages the predicted probabilities of Logistic Regression, Random Forest, and XGBoost
+- **`StackingClassifier`** — same base learners, with a Logistic Regression meta-learner (`cv=5`, `stack_method="predict_proba"`)
+
+The base learners use the **tuned grid search hyperparameters** (RF: `n_estimators=300`, `max_depth=10`, `min_samples_split=2`; XGBoost: `n_estimators=200`, `max_depth=6`, `learning_rate=0.05`), so the ensemble combines the real best models rather than untuned ones. Logistic Regression and Random Forest use `class_weight="balanced"`; XGBoost uses multiclass `multi:softprob`.
+
+Each run logs parameters, accuracy, F1 (macro & weighted), confusion matrix, classification report, and the model artifact. Both fusion models are then compared against the current best model (grid search Random Forest, **F1 macro = 0.6796**). If the best fusion model beats that threshold, it is registered as a **new version** of `student-dropout-classifier`; otherwise the existing production model is kept.
+
+### 3d. Statistical significance test (McNemar)
+
+```bash
+python src/mcnemar_test.py
+```
+
+Checks whether the small gap between the soft VotingClassifier and the production Random Forest is a **real difference** or just noise. Both models are fit on the **same saved train/test split** (no re-splitting, no re-preprocessing), and **McNemar's exact test** (`statsmodels`) is run on their agreement/disagreement contingency table — comparing the discordant pairs (RF-only correct vs Voting-only correct).
+
+The result is logged to the `student-dropout-fusion` experiment as a run named `mcnemar_test` (p-value as a metric, contingency-table counts as params). A p-value `< 0.05` means a statistically significant difference; otherwise the two models are statistically equivalent.
 
 ### 4. Promote models in the registry
 
@@ -400,6 +435,32 @@ F1 macro was used as the primary selection metric because the dataset is imbalan
 
 Best Hyperopt model (F1 macro = 0.6781) is registered as **v3 (Staging)**.
 
+### Model fusion / ensemble learning (`fusion_model.py`)
+
+Both ensembles are built on the tuned grid search base learners and evaluated on the same held-out test set.
+
+| Model | Accuracy | F1 Macro | F1 Weighted | Registry |
+|-------|----------|----------|-------------|----------|
+| Soft Voting (LR + RF + XGB) | **73.33%** | 67.60% | 73.41% | — |
+| Stacking (LR meta-learner) | 71.19% | 67.57% | 72.53% | — |
+| _Reference: grid search RF (v2)_ | _72.88%_ | _**67.96%**_ | — | _Production_ |
+
+The best fusion model (soft voting, F1 macro 0.6760) did **not** beat the production Random Forest's F1 macro (0.6796), so no new version was registered — the gated logic correctly kept the tuned Random Forest as the production candidate. Notably, soft voting reached **higher accuracy** (73.33% vs 72.88%) but slightly lower F1 macro, trading minority-class (`Enrolled`) recall for majority-class performance. Since F1 macro is the primary metric for this imbalanced problem, the simpler tuned Random Forest remains the better choice — a useful demonstration that ensembling does not always improve the metric that matters.
+
+### Statistical significance — McNemar's test (`mcnemar_test.py`)
+
+McNemar's exact test on the paired test-set predictions of the soft VotingClassifier vs the production Random Forest:
+
+| Quantity | Value |
+|----------|-------|
+| Both correct | 605 |
+| RF-only correct | 40 |
+| Voting-only correct | 44 |
+| Both wrong | 196 |
+| McNemar p-value | **0.7436** |
+
+With **p = 0.7436 ≫ 0.05**, there is **no statistically significant difference** between the two models — they make almost symmetric errors (40 vs 44 discordant cases). This confirms statistically that the F1 macro gap (0.6760 vs 0.6796) is **noise**, not a real regression, and supports keeping the simpler Random Forest in production with confidence.
+
 ### Production model summary
 
 | | |
@@ -450,7 +511,7 @@ Generated by `train.py` and saved to `outputs/` and `docs/screenshots/`.
 | Item | Value |
 |------|--------|
 | Tracking URI | `sqlite:///mlflow.db` |
-| Experiments | `student-dropout-prediction`, `student-dropout-tuning`, `student-dropout-hyperopt` |
+| Experiments | `student-dropout-prediction`, `student-dropout-tuning`, `student-dropout-hyperopt`, `student-dropout-fusion` |
 | Registered model | `student-dropout-classifier` |
 | Production alias | Version 2 (grid search tuned Random Forest) |
 | Staging alias | Version 3 (Hyperopt best model) |
@@ -463,6 +524,7 @@ Generated by `train.py` and saved to `outputs/` and `docs/screenshots/`.
 
 - `pandas`, `numpy`, `scikit-learn`, `xgboost`, `mlflow`, `matplotlib`, `jupyter`, `openpyxl`
 - `hyperopt` (Bayesian hyperparameter optimization)
+- `statsmodels` (McNemar's significance test)
 - `fastapi`, `uvicorn`, `pydantic` (REST API)
 
 ## Notes

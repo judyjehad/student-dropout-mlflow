@@ -1,0 +1,12 @@
+McNemar's test (exact)
+model_a = random_forest_grid_search
+model_b = voting_soft
+
+both_correct        = 605
+rf_only_correct     = 40
+voting_only_correct = 44
+both_wrong          = 196
+
+statistic = 40.0
+p_value   = 0.743644
+verdict   = no statistically significant difference — models perform equivalently

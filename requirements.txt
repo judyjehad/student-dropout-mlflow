@@ -8,3 +8,4 @@ fastapi==0.136.1
 uvicorn==0.47.0
 pydantic==2.13.4
 hyperopt==0.2.7
+statsmodels==0.14.6
