@@ -19,6 +19,8 @@ run named 'mcnemar_test' (p-value as a metric, contingency counts as params).
 
 import numpy as np
 import pickle
+import os
+import matplotlib.pyplot as plt
 import mlflow
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
@@ -161,7 +163,40 @@ else:
     print("   The small F1 macro gap is consistent with noise.")
 print("=" * 60)
 
-# ── 8. Log to MLflow ──────────────────────────────────────────────────────────
+# ── 8. Visualize the contingency table ────────────────────────────────────────
+os.makedirs("outputs", exist_ok=True)
+fig_path = "outputs/mcnemar_test.png"
+
+cells = np.array([[both_correct, rf_only],
+                  [voting_only,  both_wrong]])
+
+fig, ax = plt.subplots(figsize=(6.5, 5.5))
+ax.imshow(cells, cmap="Blues")
+
+ax.set_xticks([0, 1], ["Voting correct", "Voting wrong"])
+ax.set_yticks([0, 1], ["RF correct", "RF wrong"])
+
+# Annotate each cell with its count; use dark text on light cells.
+threshold = cells.max() / 2
+for i in range(2):
+    for j in range(2):
+        ax.text(j, i, f"{cells[i, j]}", ha="center", va="center",
+                fontsize=18,
+                color="white" if cells[i, j] > threshold else "black")
+
+ax.set_title("McNemar's test — soft Voting vs Random Forest")
+sig_txt = "significant" if p_value < ALPHA else "not significant"
+ax.set_xlabel(
+    f"Discordant: RF-only={rf_only}  Voting-only={voting_only}\n"
+    f"McNemar exact p = {p_value:.4f}  →  {sig_txt} (α={ALPHA})"
+)
+fig.tight_layout()
+fig.savefig(fig_path, dpi=120)
+plt.close(fig)
+
+print(f"\nSaved contingency-table figure to {fig_path}")
+
+# ── 9. Log to MLflow ──────────────────────────────────────────────────────────
 with mlflow.start_run(run_name="mcnemar_test"):
     mlflow.set_tag("test_type", "mcnemar")
     mlflow.set_tag("category", "fusion")
@@ -182,6 +217,8 @@ with mlflow.start_run(run_name="mcnemar_test"):
     mlflow.log_metric("rf_accuracy",     rf_acc)
     mlflow.log_metric("voting_accuracy", voting_acc)
     mlflow.log_metric("significant", int(p_value < ALPHA))
+
+    mlflow.log_artifact(fig_path, artifact_path="mcnemar_test")
 
     mlflow.log_text(
         f"McNemar's test (exact)\n"
